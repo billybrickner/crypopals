@@ -19,7 +19,8 @@ open("cypher.txt") do f
     l2 = convertHex(s2)
     # Decrypt
     l3 = [c1 ⊻ c2 for (c1,c2) in zip(l1,l2)]
-    expected = readline(f)
     println(join(map(Char, l3)))
+    # Verify
+    expected = readline(f)
     println("Passed Check:",convertHex(expected)==l3)
 end

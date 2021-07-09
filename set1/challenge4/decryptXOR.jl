@@ -35,9 +35,9 @@ end
 function getLetterFrequency()
     df = DataFrame(CSV.File("../../common/frequency.csv"))
     df = Matrix{Union{Float64,String}}(df)
-    characterToFrequency = Dict{Char,Float64}()
+    characterToFrequency = Dict{Int,Float64}()
     for i in 1:size(df)[1]
-        characterToFrequency[df[i,1][1]] = df[i,2]
+        characterToFrequency[Int(df[i,1][1])] = df[i,2]
     end
 
     return characterToFrequency
@@ -46,36 +46,38 @@ end
 characterToFrequency = getLetterFrequency()
 function scoreText(text)
     score = 0
-    for character in map(Char,text)
+    for character in text
         score += get(characterToFrequency, character, 0.0)
     end
     return score
 end
 
-open("cipher.txt") do f
-    # Get Cipher Text
-    maxScore = 0
-    maxMask = 'a'
-    maxText = []
-    # Loop through strings
-    while ! eof(f)
-        s1 = readline(f)
-        println(s1)
-        l1 = convertHex(s1)
-        # Loop Through Letters
-        for mask in 0:(1<<10 - 1)
-            decoded = xorMask(l1,[Int(mask)])
-            score = scoreText(decoded)
-            if maxScore < score
-                maxScore = score
-                maxMask = mask
-                maxText = [_ for _ in l1]
-                println(maxMask, " ", maxScore)
+@time begin
+    open("cipher.txt") do f
+        # Get Cipher Text
+        maxScore = 0
+        maxMask = 'a'
+        maxText = []
+        # Loop through strings
+        while ! eof(f)
+            s1 = readline(f)
+            println(s1)
+            l1 = convertHex(s1)
+            # Loop Through Letters
+            for mask in 0:(1<<10 - 1)
+                decoded = xorMask(l1,[Int(mask)])
+                score = scoreText(decoded)
+                if maxScore < score
+                    maxScore = score
+                    maxMask = mask
+                    maxText = [_ for _ in l1]
+                    println(maxMask, " ", maxScore)
+                end
             end
         end
+        # Use best match
+        decoded = xorMask(maxText,[Int(maxMask)])
+        print(Char(maxMask), " ", maxScore, ": ")
+        prettyPrint(decoded)
     end
-    # Use best match
-    decoded = xorMask(maxText,[Int(maxMask)])
-    print(Char(maxMask), " ", maxScore, ": ")
-    prettyPrint(decoded)
 end

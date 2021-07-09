@@ -1,43 +1,34 @@
 #! /usr/bin/env julia
 
-using CSV
-using DataFrames
+using CSV: CSV, File
+using DataFrames: DataFrame
+using DataStructures: DefaultDict
 
 function convertHex(s)
-    hex_array = [parse(Int, s[i:i+1], base=16) for i in range(1,step=2,stop=length(s))]
+    hex_array = Int[parse(Int, s[i:i+1], base=16) for i in range(1,step=2,stop=length(s))]
 end
 
 function prettyPrint(s)
     if typeof(s) == String
-        for character in convertHex(s)
-            print(Char(character, base=16))
-        end
+        println(map.(Char, convertHex(s), 16))
     elseif typeof(s) == Array{Int64,1}
-        println(join(map(Char, s)))
+        println(join(map.(Char, s)))
     end
 end
 
 function xorMask(cipher, mask)
     maskLength = length(mask)
-    text = [character for character in cipher]
-    # BUGFIX: Start at 0 to account for i + j starting at 1
-    for i in range(0,step=maskLength,stop=length(text))
-        for (j, maskByte) in enumerate(mask)
-            if length(text) >= i + j
-                #println("I+J:",i+j)
-                text[i+j] ⊻= mask[j]
-            end
-        end
-    end
+    text = Int[character for character in cipher]
+    text .= text .⊻ mask[mod1.(1:length(text),length(mask))]
     return text
 end
 
 function getLetterFrequency()
     df = DataFrame(CSV.File("../../common/frequency.csv"))
     df = Matrix{Union{Float64,String}}(df)
-    characterToFrequency = Dict{Char,Float64}()
+    characterToFrequency = DefaultDict{Int,Float64}(0.0)
     for i in 1:size(df)[1]
-        characterToFrequency[df[i,1][1]] = df[i,2]
+        characterToFrequency[Int(df[i,1][1])] = df[i,2]
     end
 
     return characterToFrequency
@@ -45,13 +36,11 @@ end
 
 characterToFrequency = getLetterFrequency()
 function scoreText(text)
-    score = 0
-    for character in map(Char,text)
-        score += get(characterToFrequency, character, 0.0)
-    end
-    return score
+    getFreq(x) = characterToFrequency[x]
+    return sum(map.(getFreq, text))
 end
 
+println("Starting Code")
 open("cipher.txt") do f
     # Get Cipher Text
     s1 = readline(f)

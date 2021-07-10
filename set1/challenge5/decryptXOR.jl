@@ -1,7 +1,8 @@
 #! /usr/bin/env julia
 
-using CSV
-using DataFrames
+using BenchmarkTools
+using CSV: CSV, File
+using DataFrames: DataFrame
 using Printf
 
 function convertHex(s)
@@ -22,14 +23,14 @@ function prettyPrint(s)
     end
 end
 
-@inbounds function xorMask(cipher, mask)
+function xorMask(cipher, mask)
     text = Int[character for character in cipher]
     # BUGFIX: Start at 0 to account for i + j starting at 1
-    for i in range(0,step=length(mask),stop=length(text))
+    for i in range(0,step=length(mask),stop=length(text)-1)
         for (j, maskByte) in enumerate(mask)
             if length(text) >= i + j
                 #println("I+J:",i+j)
-                text[i+j] ⊻= maskByte
+                @inbounds text[i+j] ⊻= maskByte
             end
         end
     end
@@ -61,16 +62,18 @@ open("cipher.txt") do f
     while ! eof(f)
         s = string(s, readline(f))
     end
-    for i in 1:22
+    for i in 1:15
         s = string(s,s)
     end
 
     # println("s: ",s)
     i = strToIntArray(s)
-    #println("i: ",i)
+    #$println("i: ",i)
     mask = strToIntArray("ICECOLDKILLER")
-    tmp = xorMask(i, mask)
-    tmp = xorMask(i, mask)
+    tmp = Int64[]
+    @time begin
+        tmp = xorMask(i, mask)
+    end
     @time begin
         scoreText(tmp)
     end

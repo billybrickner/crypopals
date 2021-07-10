@@ -25,7 +25,7 @@ function xorMask(cipher, mask)
         for (j, maskByte) in enumerate(mask)
             if length(text) >= i + j
                 #println("I+J:",i+j)
-                text[i+j] ⊻= mask[j]
+                @inbounds text[i+j] ⊻= mask[j]
             end
         end
     end
@@ -52,25 +52,61 @@ function scoreText(text)
     return score
 end
 
-@time begin
-    open("cipher.txt") do f
-        # Get Cipher Text
-        maxScore = 0
-        maxMask = 'a'
-        maxText = []
-        # Loop through strings
-        while ! eof(f)
-            s1 = readline(f)
-            println(s1)
-            l1 = convertHex(s1)
-            # Loop Through Letters
-            for mask in 0:(1<<10 - 1)
+open("cipher.txt") do f
+    maxScore = 0
+    maxMask = 'a'
+    maxText = []
+    l = []
+    # Get Cipher Text
+    while ! eof(f)
+        s1 = readline(f)
+        #println(s1)
+        l1 = convertHex(s1)
+        push!(l,l1)
+    end
+    @time begin
+        for l1 in l
+            for mask in 0:(1<<15 - 1)
                 decoded = xorMask(l1,[Int(mask)])
                 score = scoreText(decoded)
                 if maxScore < score
                     maxScore = score
                     maxMask = mask
-                    maxText = [_ for _ in l1]
+                    maxText = [c for c in l1]
+                    println(maxMask, " ", maxScore)
+                end
+            end
+        end
+        # Use best match
+        decoded = xorMask(maxText,[Int(maxMask)])
+        print(Char(maxMask), " ", maxScore, ": ")
+        prettyPrint(decoded)
+    end
+end
+
+open("cipher.txt") do f
+    # Get Cipher Text
+    maxScore = 0
+    maxMask = 'a'
+    maxText = []
+    l = []
+    # Loop through strings
+    while ! eof(f)
+        s1 = readline(f)
+        #println(s1)
+        l1 = convertHex(s1)
+        push!(l,l1)
+    end
+    @time begin
+        Threads.@threads for l1 in l
+            # Loop Through Letters
+            for mask in 0:(1<<15 - 1)
+                decoded = xorMask(l1,[Int(mask)])
+                score = scoreText(decoded)
+                if maxScore < score
+                    maxScore = score
+                    maxMask = mask
+                    maxText = Int[c for c in l1]
                     println(maxMask, " ", maxScore)
                 end
             end

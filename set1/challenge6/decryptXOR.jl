@@ -3,26 +3,27 @@
 using CSV: CSV, File
 using DataFrames: DataFrame
 using Base64: base64decode
+using BenchmarkTools
 
 function strToIntArray(s)
-    return Int[Int(c) for c in s]
+    return Int16[Int16(c) for c in s]
 end
 
 function prettyPrint(s)
     if typeof(s) == String
-        for character in convertHex(s)
-            print(Char(character, base=16))
-        end
-    elseif typeof(s) == Array{Int64,1}
+        println([Char(char) for char in convertHex(s)])
+    elseif typeof(s) == Array{Int16,1}
         println(join(map(Char, s)))
+    else
+        println("Unreckognized Type:",typeof(s))
     end
 end
 
 function xorMask(cipher, mask)
     if length(mask) == 1
-        return Int[char ⊻ mask[1] for char in cipher]
+        return Int16[char ⊻ mask[1] for char in cipher]
     end
-    text = Int[character for character in cipher]
+    text = Int16[character for character in cipher]
     # BUGFIX: Start at 0 to account for i + j starting at 1
     for i in range(0,step=length(mask),stop=length(text)-1)
         for (j, maskByte) in enumerate(mask)
@@ -38,15 +39,14 @@ end
 function getLetterFrequency()
     df = DataFrame(CSV.File("../../common/frequency.csv"))
     df = Matrix{Union{Float64,String}}(df)
-    characterToFrequency = Dict{Int,Float64}()
+    characterToFrequency = Dict{Int16,Float64}()
     for i in 1:size(df)[1]
-        characterToFrequency[Int(df[i,1][1])] = df[i,2]
+        characterToFrequency[Int16(df[i,1][1])] = df[i,2]
     end
 
     return characterToFrequency
 end
 
-characterToFrequency = getLetterFrequency()
 function scoreText(text)
     score = 0
     for character in text
@@ -57,81 +57,83 @@ end
 
 function editDistance(block1, block2)
     total = 0
-    for (c1, c2) in zip(block1, block2)
-        total += count_ones(c1 ⊻ c2)
+    @simd for i in 1:length(block1)
+        @inbounds total += count_ones(block1[i] ⊻ block2[i])
     end
     return total
 end
 
-println("Staring Code!")
-open("cipher.txt") do f
-    s = ""
-    while ! eof(f)
-        s = string(s, readline(f))
-    end
-    encoded = base64decode(s)
+const global characterToFrequency = getLetterFrequency()
+function main()
+    println("Staring Code!")
+    @time begin
+        open("cipher.txt") do f
+            s = ""
+            while ! eof(f)
+                s = string(s, readline(f))
+            end
+            encoded = base64decode(s)
 
-    # Block Size
-    minEdit = 100
-    minBlockSize = 0
-    minEditList = []
-    Threads.@threads for i in 2:40
-        numSamples = 7
-        block1 = encoded[1:numSamples*i]
-        block2 = encoded[1 + numSamples*i:2*numSamples*i]
-        edit = editDistance(block1, block2)/(i*numSamples)
-        if edit < 1.05*minEdit
-            #println(i, " ", edit)
-            push!(minEditList,[edit,i])
-        end
-        if edit < minEdit
-            minEdit = edit
-            minBlockSize = i
-        end
-    end
-    topGuesses = sort(minEditList)[1:5]
-    println("Top Guesses for Block Size")
-    for (score, blocksize) in topGuesses
-        println("Score: ",score," BlockSize: ",Int(blocksize))
-    end
-
-    # Find Key
-    key = Int[]
-    decoded = Int[]
-    maxGuess = 0
-    for (_, guess) in topGuesses
-        guess = Int(guess)
-        println("Guess ",guess)
-        keyGuess = [0 for i in 1:guess]
-        Threads.@threads for i in 1:guess
-            charBlock = [i+(j)*guess for j in 0:40]
-            maxScore = 0
-            maxChar = 0
-            for char in 0:255
-                tmp = [encoded[c] for c in charBlock]
-                score = scoreText(xorMask(tmp, [char]))
-                if score > maxScore
-                    maxScore = score
-                    maxChar = char
+            # Block Size
+            minEdit = 100
+            minBlockSize = 0
+            minEditList = []
+            for i in 2:40
+                numSamples = 7
+                block1 = encoded[1:numSamples*i]
+                block2 = encoded[1 + numSamples*i:2*numSamples*i]
+                edit = editDistance(block1, block2)/(i*numSamples)
+                if edit < 1.05*minEdit
+                    #println(i, " ", edit)
+                    push!(minEditList,[edit,i])
+                end
+                if edit < minEdit
+                    minEdit = edit
+                    minBlockSize = i
                 end
             end
-            keyGuess[i] = maxChar
-        end
-        decodedGuess = xorMask(encoded,keyGuess)
-        print("Key: ")
-        prettyPrint(keyGuess)
-        print("Decrypted: ")
-        prettyPrint(decodedGuess[1:40])
-        guessScore = scoreText(decodedGuess)
-        if guessScore > maxGuess
-            println("Score: ", guessScore)
-            maxGuess = guessScore
-            decoded = decodedGuess
-            key = keyGuess
+            topGuesses = sort(minEditList)[1:5]
+            println("Top Guesses for Block Size")
+            for (score, blocksize) in topGuesses
+                println("Score: ",score," BlockSize: ",Int16(blocksize))
+            end
+
+            # Find Key
+            key = Int16[]
+            decoded = Int16[]
+            maxGuess = 0
+            for (_, guess) in topGuesses
+                guess = Int16(guess)
+                println("Guess ",guess)
+                keyGuess = Int16[0 for i in 1:guess]
+                for i in 1:guess
+                    charBlock = [i+(j)*guess for j in 0:40]
+                    maxScore = 0
+                    maxChar = 0
+                    for char in 0:255
+                        tmp = [encoded[c] for c in charBlock]
+                        score = scoreText(xorMask(tmp, [char]))
+                        if score > maxScore
+                            maxScore = score
+                            maxChar = char
+                        end
+                    end
+                    keyGuess[i] = maxChar
+                end
+                decodedGuess = xorMask(encoded,keyGuess)
+                guessScore = scoreText(decodedGuess)
+                if guessScore > maxGuess
+                    maxGuess = guessScore
+                    decoded = decodedGuess
+                    key = keyGuess
+                end
+            end
+            print("Key: ")
+            prettyPrint(key)
+            println("Decrypted: ")
+            prettyPrint(decoded)
         end
     end
-    print("Key: ")
-    prettyPrint(key)
-    println("Decrypted: ")
-    prettyPrint(decoded)
 end
+
+main()

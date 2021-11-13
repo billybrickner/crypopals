@@ -10,7 +10,7 @@ function printHex(s)
     end
 end
 
-open("cypher.txt") do f
+open("cipher.txt") do f
     # Get Cipher Text
     s1 = readline(f)
     l1 = convertHex(s1)

@@ -1,4 +1,4 @@
-#! /usr/bin/env julia
+#!/usr/bin/env julia
 
 using CSV: CSV, File
 using DataFrames: DataFrame
@@ -25,7 +25,6 @@ end
 
 function getLetterFrequency()
     df = DataFrame(CSV.File("../../common/frequency.csv"))
-    df = Matrix{Union{Float64,String}}(df)
     characterToFrequency = DefaultDict{Int,Float64}(0.0)
     for i in 1:size(df)[1]
         characterToFrequency[Int(df[i,1][1])] = df[i,2]

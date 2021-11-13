@@ -7,7 +7,8 @@ function printHex(s)
     end
 end
 
-open("cypher.txt") do f
+open("cipher.txt") do f
     s = readline(f)
     printHex(s)
+    print('\n')
 end

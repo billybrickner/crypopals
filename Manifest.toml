@@ -1,0 +1,8 @@
+# This file is machine-generated - editing it directly is not advised
+
+[[AES]]
+git-tree-sha1 = "ec9af4d46b37250762b8d65181196daf92945369"
+repo-rev = "master"
+repo-url = "https://github.com/faf0/AES.jl"
+uuid = "15a180a4-738c-4bf0-92bf-fd08aa96a747"
+version = "1.0.0"

@@ -1,3 +1,5 @@
+#! /usr/bin/env julia
+
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../.."))
 Pkg.add(url="https://github.com/faf0/AES.jl")

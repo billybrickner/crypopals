@@ -2,3 +2,6 @@ name = "cryptopals"
 uuid = "19b2de70-4eb6-478f-9c1b-7eb5e574c4c9"
 authors = ["Billy Brickner <billybrickner@gmail.com>"]
 version = "0.1.0"
+
+[deps]
+AES = "15a180a4-738c-4bf0-92bf-fd08aa96a747"

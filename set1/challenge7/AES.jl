@@ -2,7 +2,7 @@
 
 using CUDA
 using BenchmarkTools
-using StaticArrays
+using Cthulhu
 
 @enum AESKeysize::Int begin
     SIZE_128 = 16
@@ -11,7 +11,7 @@ using StaticArrays
 end
 
 # Rijndael S-box
-sbox =  @SVector UInt8[
+sbox =  UInt8[
         0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67,
         0x2b, 0xfe, 0xd7, 0xab, 0x76, 0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59,
         0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0, 0xb7,
@@ -38,7 +38,7 @@ sbox =  @SVector UInt8[
         0x54, 0xbb, 0x16, 0x63]
 
 # Rijndael Inverted S-box
-rsbox = @SVector UInt8[
+rsbox = UInt8[
         0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3,
         0x9e, 0x81, 0xf3, 0xd7, 0xfb , 0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f,
         0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb , 0x54,
@@ -66,7 +66,7 @@ rsbox = @SVector UInt8[
 
 
 # Rijndael Rcon
-rcon =  @SVector UInt8[
+rcon =  UInt8[
         0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
         0x6c, 0xd8, 0xab, 0x4d, 0x9a, 0x2f, 0x5e, 0xbc, 0x63, 0xc6, 0x97,
         0x35, 0x6a, 0xd4, 0xb3, 0x7d, 0xfa, 0xef, 0xc5, 0x91, 0x39, 0x72,
@@ -93,7 +93,7 @@ rcon =  @SVector UInt8[
         0xe8, 0xcb, 0x8d ]
 
 
-function core(t1, t2, t3, t4, iteration)
+function core(t1, t2, t3, t4, iteration, sbox, rcon)
     t2, t3, t4, t1 = t1, t2, t3, t4
 
     t1 = sbox[t1 + 1]
@@ -106,40 +106,36 @@ function core(t1, t2, t3, t4, iteration)
     return t1, t2, t3, t4
 end
 
-function expandKey(expandedKey, key, keySize, expandedKeySize)
+function expandKey(expandedKey, key, keySize, expandedKeySize, sbox, rsbox, rcon)
     #println("ExpandKey in:  ", key)
-    currentSize = 0
     rconIteration = 1
 
     for i in 1:length(key)
         @inbounds expandedKey[i] = key[i]
     end
-    currentSize += length(key)
 
-    while currentSize < expandedKeySize
-        t1, t2, t3, t4 = expandedKey[currentSize - 2: currentSize + 1]
+    for currentSize in length(key):4:(expandedKeySize-1)
+        t1 = expandedKey[currentSize - 2]
+        t2 = expandedKey[currentSize - 1]
+        t3 = expandedKey[currentSize]
+        t4 = expandedKey[currentSize + 1]
 
         if currentSize % keySize == 0
-            t1, t2, t3, t4 = core(t1,t2,t3,t4, rconIteration)
+            t1, t2, t3, t4 = core(t1,t2,t3,t4, rconIteration, sbox, rcon)
             rconIteration += 1
         end
 
-        if keySize == Int(SIZE_256) && currentSize % keySize == 16
-            t1 = sbox[t1 + 1]
-            t2 = sbox[t2 + 1]
-            t3 = sbox[t3 + 1]
-            t4 = sbox[t4 + 1]
-        end
+        #if keySize == Int(SIZE_256) && currentSize % keySize == 16
+        #    t1 = sbox[t1 + 1]
+        #    t2 = sbox[t2 + 1]
+        #    t3 = sbox[t3 + 1]
+        #    t4 = sbox[t4 + 1]
+        #end
 
-        currentSize += 1
-        expandedKey[currentSize] = expandedKey[currentSize - keySize] ⊻ t1
-        currentSize += 1
-        expandedKey[currentSize] = expandedKey[currentSize - keySize] ⊻ t2
-        currentSize += 1
-        expandedKey[currentSize] = expandedKey[currentSize - keySize] ⊻ t3
-        currentSize += 1
-        expandedKey[currentSize] = expandedKey[currentSize - keySize] ⊻ t4
-
+        #expandedKey[currentSize+1] = expandedKey[currentSize - keySize + 1] ⊻ t1
+        #expandedKey[currentSize+2] = expandedKey[currentSize - keySize + 2] ⊻ t2
+        #expandedKey[currentSize+3] = expandedKey[currentSize - keySize + 3] ⊻ t3
+        #expandedKey[currentSize+4] = expandedKey[currentSize - keySize + 4] ⊻ t4
     end
 
     #println("ExpandKey out: ", expandedKey)
@@ -187,7 +183,7 @@ function decode(block_out, block_in, key, keySize::AESKeysize)
 
     # Expand the key
     expandedKey = UInt8[0 for _ in 1:expandedKeySize]
-    expandKey(expandedKey, key, Int(keySize), expandedKeySize)
+    expandKey(expandedKey, key, Int(keySize), expandedKeySize, sbox, rsbox, rcon)
 
     # Column Major
     transposeBlock(block_in)
@@ -199,7 +195,7 @@ function decode(block_out, block_in, key, keySize::AESKeysize)
     transposeBlock(block_out)
 end
 
-const NUM_BLOCKS = 1
+const NUM_BLOCKS = 100000
 
 # Self Test
 function AESTest()
@@ -232,15 +228,19 @@ function AESParrallelTest()
 end
 
 # Something like this, but more complicated
-function blockAdd(in, out)
+function blockAdd(in, out, sbox)
     for i in 1:16
-        @inbounds out[(i%16)+1] = 2*in[i] + 1
+        @inbounds out[(i%16)+1] = sbox[((2*in[i])%256)%255 + 1]
     end
 end
 
 
-function AESKernel!(in, key, keySize::AESKeysize, out)
-    i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+function AESKernel!(in, key, keySize::AESKeysize, out, sbox, rsbox, rcon)
+    i = Int64((blockIdx().x - 1) * blockDim().x + threadIdx().x)
+
+    if i > length(in)
+        return nothing
+    end
 
     # Allocate our blocks of memory
     block_in  = CuStaticSharedArray(UInt8, 16)
@@ -257,7 +257,7 @@ function AESKernel!(in, key, keySize::AESKeysize, out)
     numRounds, expandedKeySize = getExpandedKeySizeAndRounds(keySize)
 
     # Expand the key
-    expandKey(expandedKey, key_in, Int(keySize), expandedKeySize)
+    expandKey(expandedKey, key_in, Int(keySize), expandedKeySize, sbox, rsbox, rcon)
 
     # Column Major
     transposeBlock(block_in)
@@ -283,6 +283,10 @@ function AESGPUTest()
     randKey = UInt8[i for i in 1:16]
     key = reinterpret(UInt128, randKey)[1]
 
+    global sbox = CuArray(sbox)
+    global rsbox = CuArray(rsbox)
+    global rcon = CuArray(rcon)
+
     i1 = reinterpret(UInt128, randTextBlock)
     #println("I1", i1)
     cu_i1 = CuArray(i1)
@@ -290,9 +294,11 @@ function AESGPUTest()
     arraySize = length(i1)
     cu_o1 = CuArray(UInt128[0 for i in 1:arraySize])
 
-    @cuda threads=NUM_BLOCKS AESKernel!(cu_i1, key, SIZE_128, cu_o1)
+    @cuda threads=1024 blocks=cld(NUM_BLOCKS,1024) AESKernel!(cu_i1, key, SIZE_128, cu_o1, sbox, rsbox, rcon)
 end
 
-AESTest()
+println("CPU")
+@btime AESTest()
 #AESParrallelTest()
-AESGPUTest()
+println("GPU")
+@btime AESGPUTest()
